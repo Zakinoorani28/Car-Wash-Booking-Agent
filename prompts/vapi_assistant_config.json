@@ -1,0 +1,94 @@
+{
+  "name": "SparkleWash Vapi Voice Receptionist",
+  "transcriber": {
+    "provider": "deepgram",
+    "model": "nova-2",
+    "language": "en-US"
+  },
+  "model": {
+    "provider": "groq",
+    "model": "llama-3.1-8b-instant",
+    "temperature": 0.5,
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are SparkleWash Voice, an AI receptionist for SparkleWash Auto Detailing. Keep your answers brief, warm, and natural over the phone. Help callers pick packages, check open time slots using check_slot_availability, and create confirmed bookings using create_voice_booking."
+      }
+    ],
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "check_slot_availability",
+          "description": "Checks open car wash time slots for a given date",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "date": {
+                "type": "string",
+                "description": "Date in YYYY-MM-DD format"
+              }
+            },
+            "required": ["date"]
+          }
+        },
+        "server": {
+          "url": "{{BASE_URL}}/api/vapi/webhook"
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "create_voice_booking",
+          "description": "Records a confirmed car wash appointment booking in MongoDB",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "customerName": {
+                "type": "string",
+                "description": "Full name of the caller"
+              },
+              "customerPhone": {
+                "type": "string",
+                "description": "Phone number of customer"
+              },
+              "serviceType": {
+                "type": "string",
+                "enum": [
+                  "Basic Wash",
+                  "Premium Detail",
+                  "Executive Polish",
+                  "Interior Cleaning"
+                ],
+                "description": "Chosen service package"
+              },
+              "carType": {
+                "type": "string",
+                "enum": ["Sedan", "SUV", "Truck", "Hatchback", "Van", "Coupe"],
+                "description": "Vehicle type"
+              },
+              "date": {
+                "type": "string",
+                "description": "Booking date YYYY-MM-DD"
+              },
+              "timeSlot": {
+                "type": "string",
+                "description": "Time slot e.g. 10:00 AM"
+              }
+            },
+            "required": ["customerName", "serviceType", "date", "timeSlot"]
+          }
+        },
+        "server": {
+          "url": "{{BASE_URL}}/api/vapi/webhook"
+        }
+      }
+    ]
+  },
+  "voice": {
+    "provider": "cartesia",
+    "voiceId": "a0e16712-911e-455d-9221-50e56e0d9b62"
+  },
+  "firstMessage": "Thank you for calling SparkleWash Auto Detailing! My name is Sparkle. How can I help your vehicle shine today?",
+  "serverUrl": "{{BASE_URL}}/api/vapi/webhook"
+}

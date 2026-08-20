@@ -1,0 +1,40 @@
+{
+  "agent_name": "Washy - Sparkle Car Wash",
+  "voice": "professional_female_en",
+  "language": "en-US",
+  "greeting": "Hello! Thank you for calling Sparkle Car Wash. I'm Washy, your booking assistant. I'll help you schedule your car wash today. May I start with your name please?",
+  "webhook_url": "{{BASE_URL}}/api/voice/webhook",
+  "max_call_duration_seconds": 300,
+  "silence_timeout_seconds": 5,
+  "variables_to_collect": [
+    {
+      "name": "customer_name",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "vehicle_type",
+      "type": "enum",
+      "options": ["sedan", "suv", "truck", "motorcycle", "van"],
+      "required": true
+    },
+    {
+      "name": "booking_date",
+      "type": "date",
+      "required": true
+    },
+    {
+      "name": "booking_time",
+      "type": "time",
+      "required": true
+    },
+    {
+      "name": "service_type",
+      "type": "enum",
+      "options": ["basic", "premium", "full_detail"],
+      "required": true
+    }
+  ],
+  "on_complete_webhook": "{{BASE_URL}}/api/voice/booking-complete",
+  "fallback_message": "I'll transfer you to our team. One moment."
+}

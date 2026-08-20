@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sparkle Car Wash — Booking Dashboard</title>
+  
+  <!-- TailwindCSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col">
+
+  <!-- Header -->
+  <header class="bg-slate-900/80 backdrop-blur-md border-b border-slate-800 sticky top-0 z-50 px-6 py-4 flex flex-wrap justify-between items-center gap-4">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white text-xl shadow-lg shadow-cyan-500/20">
+        🚗
+      </div>
+      <div>
+        <h1 class="text-xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">
+          Sparkle Car Wash — Booking Dashboard
+        </h1>
+        <p class="text-xs text-slate-400">Live AI Receptionist & Appointment Monitor (Whapi.Cloud + VAPI.ai)</p>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+        System Active
+      </span>
+      <button onclick="fetchData()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-lg border border-slate-700 transition flex items-center gap-2">
+        <i class="fa-solid fa-arrows-rotate" id="refresh-icon"></i> Refresh Now
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Dashboard Content -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-6 space-y-6">
+
+    <!-- Stats Row (4 Cards) -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      
+      <!-- Card 1: Total Bookings Today -->
+      <div class="bg-slate-900/70 backdrop-blur-md border border-slate-800 p-5 rounded-2xl flex items-center justify-between shadow-xl">
+        <div>
+          <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Bookings Today</p>
+          <p class="text-3xl font-extrabold text-white mt-1" id="stat-today">0</p>
+        </div>
+        <div class="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 flex items-center justify-center text-xl">
+          📅
+        </div>
+      </div>
+
+      <!-- Card 2: WhatsApp Bookings -->
+      <div class="bg-slate-900/70 backdrop-blur-md border border-slate-800 p-5 rounded-2xl flex items-center justify-between shadow-xl">
+        <div>
+          <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">WhatsApp Bookings</p>
+          <p class="text-3xl font-extrabold text-emerald-400 mt-1" id="stat-whatsapp">0</p>
+        </div>
+        <div class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center text-xl">
+          💬
+        </div>
+      </div>
+
+      <!-- Card 3: Voice Bookings -->
+      <div class="bg-slate-900/70 backdrop-blur-md border border-slate-800 p-5 rounded-2xl flex items-center justify-between shadow-xl">
+        <div>
+          <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Voice Bookings</p>
+          <p class="text-3xl font-extrabold text-blue-400 mt-1" id="stat-voice">0</p>
+        </div>
+        <div class="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center text-xl">
+          📞
+        </div>
+      </div>
+
+      <!-- Card 4: Revenue PKR -->
+      <div class="bg-slate-900/70 backdrop-blur-md border border-slate-800 p-5 rounded-2xl flex items-center justify-between shadow-xl">
+        <div>
+          <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Revenue (PKR)</p>
+          <p class="text-3xl font-extrabold text-emerald-400 mt-1" id="stat-revenue">PKR 0</p>
+        </div>
+        <div class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center text-xl">
+          💰
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Filter Buttons Bar -->
+    <div class="flex flex-wrap items-center justify-between gap-4 bg-slate-900/50 p-3 rounded-xl border border-slate-800">
+      <div class="flex flex-wrap gap-2">
+        <button onclick="setFilter('all')" id="filter-all" class="filter-btn px-4 py-2 text-xs font-semibold rounded-lg bg-cyan-600 text-white shadow-md transition">
+          All Bookings
+        </button>
+        <button onclick="setFilter('whatsapp')" id="filter-whatsapp" class="filter-btn px-4 py-2 text-xs font-semibold rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 transition">
+          💬 WhatsApp Only
+        </button>
+        <button onclick="setFilter('voice')" id="filter-voice" class="filter-btn px-4 py-2 text-xs font-semibold rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 transition">
+          📞 Voice Only
+        </button>
+        <button onclick="setFilter('today')" id="filter-today" class="filter-btn px-4 py-2 text-xs font-semibold rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 transition">
+          📅 Today
+        </button>
+        <button onclick="setFilter('confirmed')" id="filter-confirmed" class="filter-btn px-4 py-2 text-xs font-semibold rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 transition">
+          ✅ Confirmed
+        </button>
+      </div>
+
+      <div class="text-xs text-slate-400" id="last-updated">
+        Updating in 30s...
+      </div>
+    </div>
+
+    <!-- Bookings Table Container -->
+    <div class="bg-slate-900/70 backdrop-blur-md border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="bg-slate-950/80 text-slate-400 text-xs uppercase tracking-wider font-bold border-b border-slate-800">
+              <th class="py-3.5 px-4">Booking ID</th>
+              <th class="py-3.5 px-4">Channel</th>
+              <th class="py-3.5 px-4">Customer</th>
+              <th class="py-3.5 px-4">Vehicle</th>
+              <th class="py-3.5 px-4">Service</th>
+              <th class="py-3.5 px-4">Date</th>
+              <th class="py-3.5 px-4">Time</th>
+              <th class="py-3.5 px-4 text-right">Price</th>
+              <th class="py-3.5 px-4">Status</th>
+            </tr>
+          </thead>
+          <tbody id="bookings-table-body" class="divide-y divide-slate-800/60 text-sm">
+            <!-- Loading State -->
+            <tr>
+              <td colspan="9" class="py-12 text-center text-slate-400">
+                <i class="fa-solid fa-circle-notch fa-spin text-2xl text-cyan-500 mb-2"></i>
+                <p>Loading live bookings...</p>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- JavaScript Code -->
+  <script>
+    let allBookings = [];
+    let currentFilter = 'all';
+    let countdownSecs = 30;
+
+    async function fetchData() {
+      const icon = document.getElementById('refresh-icon');
+      if (icon) icon.classList.add('fa-spin');
+
+      try {
+        // 1. Fetch Today Stats
+        const statsRes = await fetch('/api/bookings/stats/today');
+        const statsData = await statsRes.json();
+        if (statsData.success && statsData.data) {
+          document.getElementById('stat-today').textContent = statsData.data.total;
+          document.getElementById('stat-whatsapp').textContent = statsData.data.whatsapp;
+          document.getElementById('stat-voice').textContent = statsData.data.voice;
+          document.getElementById('stat-revenue').textContent = `PKR ${statsData.data.revenue}`;
+        }
+
+        // 2. Fetch All Bookings List
+        const bookingsRes = await fetch('/api/bookings?limit=50');
+        const bookingsData = await bookingsRes.json();
+
+        if (bookingsData.success && Array.isArray(bookingsData.data)) {
+          allBookings = bookingsData.data;
+        } else if (Array.isArray(bookingsData)) {
+          allBookings = bookingsData;
+        }
+      } catch (err) {
+        console.warn('Backend API connection offline, displaying demo records:', err);
+        allBookings = [
+          {
+            bookingId: 'CW-20260820-A19X',
+            channel: 'whatsapp',
+            customerInfo: { name: 'Ahmed Khan', phone: '+92 300 1234567' },
+            vehicleInfo: { type: 'suv' },
+            appointment: { date: '2026-08-20', time: '10:00', serviceType: 'premium', estimatedPrice: 1000 },
+            status: 'confirmed'
+          },
+          {
+            bookingId: 'CW-20260820-B88Z',
+            channel: 'voice',
+            customerInfo: { name: 'Fatima Ali', phone: '+92 321 9876543' },
+            vehicleInfo: { type: 'sedan' },
+            appointment: { date: '2026-08-20', time: '14:00', serviceType: 'full_detail', estimatedPrice: 2000 },
+            status: 'confirmed'
+          },
+          {
+            bookingId: 'CW-20260820-C44M',
+            channel: 'whatsapp',
+            customerInfo: { name: 'Tariq Mahmood', phone: '+92 333 4445556' },
+            vehicleInfo: { type: 'motorcycle' },
+            appointment: { date: '2026-08-21', time: '17:00', serviceType: 'basic', estimatedPrice: 500 },
+            status: 'collecting'
+          }
+        ];
+        document.getElementById('stat-today').textContent = '2';
+        document.getElementById('stat-whatsapp').textContent = '2';
+        document.getElementById('stat-voice').textContent = '1';
+        document.getElementById('stat-revenue').textContent = 'PKR 3000';
+      } finally {
+        if (icon) setTimeout(() => icon.classList.remove('fa-spin'), 500);
+        renderTable();
+      }
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById('bookings-table-body');
+      const todayStr = new Date().toISOString().split('T')[0];
+
+      let filtered = allBookings.filter(b => {
+        if (currentFilter === 'whatsapp') return b.channel === 'whatsapp';
+        if (currentFilter === 'voice') return b.channel === 'voice';
+        if (currentFilter === 'today') return (b.appointment?.date || b.date) === todayStr;
+        if (currentFilter === 'confirmed') return b.status === 'confirmed';
+        return true;
+      });
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="9" class="py-12 text-center text-slate-400">
+              <div class="text-4xl mb-2">🚗</div>
+              <p class="text-base font-semibold text-slate-300">No bookings yet</p>
+              <p class="text-xs text-slate-500">Bookings will appear here automatically.</p>
+            </td>
+          </tr>`;
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(b => {
+        const bId = b.bookingId || 'CW-PENDING';
+        const isWhatsapp = b.channel === 'whatsapp';
+        const channelIcon = isWhatsapp ? '💬' : '📞';
+        const channelColor = isWhatsapp ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' : 'text-blue-400 bg-blue-500/10 border-blue-500/20';
+
+        const name = b.customerInfo?.name || b.customerName || 'Pending';
+        const phone = b.customerInfo?.phone || b.customerPhone || 'N/A';
+        const vehicle = (b.vehicleInfo?.type || b.carType || 'N/A').toUpperCase();
+        const date = b.appointment?.date || b.date || 'N/A';
+        const time = b.appointment?.time || b.timeSlot || 'N/A';
+        const serviceRaw = b.appointment?.serviceType || b.serviceType || 'basic';
+        const serviceDisplay = serviceRaw.replace('_', ' ').toUpperCase();
+        const price = b.appointment?.estimatedPrice ? `PKR ${b.appointment.estimatedPrice}` : (serviceRaw === 'full_detail' ? 'PKR 2000' : serviceRaw === 'premium' ? 'PKR 1000' : 'PKR 500');
+
+        let statusBadge = 'bg-yellow-500/10 border-yellow-500/20 text-yellow-400';
+        if (b.status === 'confirmed') statusBadge = 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400';
+        if (b.status === 'cancelled') statusBadge = 'bg-red-500/10 border-red-500/20 text-red-400';
+
+        return `
+          <tr class="hover:bg-slate-800/40 transition border-b border-slate-800/60">
+            <td class="py-3.5 px-4 font-mono font-semibold text-slate-200 text-xs">${escapeHtml(bId)}</td>
+            <td class="py-3.5 px-4">
+              <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border ${channelColor}">
+                <span>${channelIcon}</span>
+                <span class="capitalize">${escapeHtml(b.channel)}</span>
+              </span>
+            </td>
+            <td class="py-3.5 px-4">
+              <p class="font-semibold text-white">${escapeHtml(name)}</p>
+              <p class="text-xs text-slate-400">${escapeHtml(phone)}</p>
+            </td>
+            <td class="py-3.5 px-4 font-medium text-slate-300 text-xs">${escapeHtml(vehicle)}</td>
+            <td class="py-3.5 px-4">
+              <span class="text-xs font-semibold text-cyan-400 bg-cyan-500/10 px-2 py-1 rounded border border-cyan-500/20">
+                ${escapeHtml(serviceDisplay)}
+              </span>
+            </td>
+            <td class="py-3.5 px-4 text-slate-300 text-xs font-medium">${escapeHtml(date)}</td>
+            <td class="py-3.5 px-4 text-slate-300 text-xs font-medium">${escapeHtml(time)}</td>
+            <td class="py-3.5 px-4 text-right font-bold text-emerald-400 text-xs">${escapeHtml(price)}</td>
+            <td class="py-3.5 px-4">
+              <span class="px-2.5 py-1 rounded-full text-xs font-bold uppercase border ${statusBadge}">
+                ${escapeHtml(b.status || 'collecting')}
+              </span>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function setFilter(filterType) {
+      currentFilter = filterType;
+      document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.classList.remove('bg-cyan-600', 'text-white');
+        btn.classList.add('bg-slate-800', 'text-slate-300');
+      });
+      const activeBtn = document.getElementById(`filter-${filterType}`);
+      if (activeBtn) {
+        activeBtn.classList.remove('bg-slate-800', 'text-slate-300');
+        activeBtn.classList.add('bg-cyan-600', 'text-white');
+      }
+      renderTable();
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    // Auto-refresh countdown every second
+    setInterval(() => {
+      countdownSecs--;
+      if (countdownSecs <= 0) {
+        fetchData();
+        countdownSecs = 30;
+      }
+      const timerEl = document.getElementById('last-updated');
+      if (timerEl) timerEl.textContent = `Auto-refresh in ${countdownSecs}s`;
+    }, 1000);
+
+    // Initial Fetch
+    fetchData();
+  </script>
+</body>
+</html>

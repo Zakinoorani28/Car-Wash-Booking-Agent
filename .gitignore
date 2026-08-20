@@ -1,0 +1,19 @@
+# Environment Variables
+.env
+server/.env
+
+# Node Dependencies
+node_modules/
+package-lock.json
+
+# Vector DB & Cache
+chroma_db/
+.cache/
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
