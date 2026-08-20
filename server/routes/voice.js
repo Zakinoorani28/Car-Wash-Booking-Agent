@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const bookingService = require("../services/bookingService");
-const wapiService = require("../services/wapiService");
+const whapiService = require("../services/whapiService");
 
 /**
  * GET /api/voice/health

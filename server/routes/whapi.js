@@ -5,20 +5,29 @@ const path = require('path');
 const whapiService = require('../services/whapiService');
 const bookingService = require('../services/bookingService');
 
-// Load WhatsApp System Prompt
-let systemPrompt = '';
-try {
-  const promptPath = path.join(__dirname, '../../prompts/whatsapp_system_prompt.md');
-  if (fs.existsSync(promptPath)) {
-    systemPrompt = fs.readFileSync(promptPath, 'utf8');
-  }
-} catch (err) {
-  console.warn('Could not read whatsapp_system_prompt.md, using default fallback.');
-}
+// Compact WhatsApp System Prompt Wrapper for Groq Rate Limit Safety
+const COMPACT_SYSTEM_PROMPT = `You are Washy 🚗, AI car wash receptionist for Sparkle Car Wash, Karachi.
+Tones: Friendly, short WhatsApp style (max 2-3 lines, light emojis).
+Packages (PKR): Basic (500, 30m), Premium (1000, 60m), Full Detail (2000, 120m).
+Vehicles: sedan, suv, truck, motorcycle, van.
+Urdu terms: kal=tomorrow, parso=day after, subah=09:00, dopahar=14:00, shaam=17:00.
+
+Extract fields & respond ALWAYS in STRICT JSON:
+{
+  "message": "Short reply to send to user",
+  "extracted": {
+    "name": string or null,
+    "vehicle_type": "sedan/suv/truck/motorcycle/van" or null,
+    "date": "YYYY-MM-DD" or null,
+    "time": "HH:MM" or null,
+    "service_type": "basic/premium/full_detail" or null
+  },
+  "booking_complete": boolean,
+  "next_action": "collect_name/collect_vehicle/collect_date/collect_time/collect_service/confirm/completed"
+}`;
 
 /**
  * GET /api/whapi/webhook
- * Whapi Verification Endpoint
  */
 router.get('/webhook', (req, res) => {
   res.status(200).json({ status: 'online', channel: 'Whapi.Cloud WhatsApp Webhook' });
@@ -26,50 +35,55 @@ router.get('/webhook', (req, res) => {
 
 /**
  * POST /api/whapi/webhook
- * Whapi.Cloud Webhook Handler
  */
 router.post('/webhook', (req, res) => {
-  // STEP 1 — Security Token Verification
+  // STEP 1 — Security Verification
   if (!whapiService.verifyWebhookToken(req)) {
     console.warn('[Whapi Security Warning] Webhook token mismatch or missing. Proceeding for Whapi sandbox compatibility.');
   }
 
-  // STEP 2 — Respond 200 OK immediately to Whapi.Cloud before async processing
+  // STEP 2 — Respond 200 OK immediately
   res.status(200).json({ status: 'received' });
 
-  // Process message asynchronously
+  // Async processing
   setImmediate(async () => {
     try {
-      // STEP 3 — Parse incoming Whapi message
+      // STEP 3 — Parse incoming message
       const parsed = whapiService.parseIncomingMessage(req.body);
-      if (!parsed) return; // Not a text message or sent by bot, ignore
+      if (!parsed) return;
 
-      // STEP 4 — Get or create active session
+      // Ignore group chats or broadcasts (chatId containing @g.us)
+      if (parsed.chatId && parsed.chatId.includes('@g.us')) {
+        console.log('[Whapi] Group message ignored.');
+        return;
+      }
+
+      // STEP 4 — Get or create session
       let booking = await bookingService.getOrCreateSession(parsed.phone, 'whatsapp');
 
-      // STEP 5 — Build Groq messages array (System + last 10 history turns + user message)
-      const historyTurns = (booking.conversationHistory || []).slice(-10).map((h) => ({
+      // STEP 5 — Build Groq context (compact system prompt + last 6 turns)
+      const historyTurns = (booking.conversationHistory || []).slice(-6).map((h) => ({
         role: h.role === 'assistant' ? 'assistant' : 'user',
         content: h.content,
       }));
 
       const messages = [
-        { role: 'system', content: `${systemPrompt}\n\nToday's Date: ${new Date().toISOString().split('T')[0]}` },
+        { role: 'system', content: `${COMPACT_SYSTEM_PROMPT}\nToday's Date: ${new Date().toISOString().split('T')[0]}` },
         ...historyTurns,
         { role: 'user', content: parsed.messageText },
       ];
 
-      // STEP 6 — Call Groq with 1 retry on error
+      // STEP 6 — Call Groq with groq/compound-mini
       const { groq } = require('../index');
       let groqResponse = null;
 
       const callGroqWithRetry = async (attempt = 1) => {
         try {
           const response = await groq.chat.completions.create({
-            model: 'llama-3.1-8b-instant',
+            model: 'groq/compound-mini',
             messages: messages,
             temperature: 0.3,
-            max_tokens: 500,
+            max_tokens: 400,
             response_format: { type: 'json_object' },
           });
           const content = response.choices[0]?.message?.content;
@@ -88,17 +102,17 @@ router.post('/webhook', (req, res) => {
         groqResponse = await callGroqWithRetry(1);
       } catch (err) {
         console.error('[Groq Error]:', err.message);
-        await whapiService.sendTextMessage(parsed.phone, 'Sorry, please try again!');
+        await whapiService.sendTextMessage(parsed.phone, 'Sorry, please try again in a moment!');
         return;
       }
 
-      // STEP 7 — Validate parsed JSON from Groq
+      // STEP 7 — Validate parsed JSON
       if (!groqResponse || !groqResponse.message) {
         await whapiService.sendTextMessage(parsed.phone, 'Sorry, please try again!');
         return;
       }
 
-      // STEP 8 — Update booking from extracted fields
+      // STEP 8 — Update booking from extractions
       if (groqResponse.extracted) {
         const extractions = {
           name: groqResponse.extracted.name,
@@ -116,7 +130,7 @@ router.post('/webhook', (req, res) => {
       // STEP 9 — Send WhatsApp reply via Whapi.Cloud
       await whapiService.sendTextMessage(parsed.phone, groqResponse.message);
 
-      // STEP 10 — Save conversation turn & trim history to 50 max
+      // STEP 10 — Save conversation turn
       if (!booking.conversationHistory) booking.conversationHistory = [];
       booking.conversationHistory.push({ role: 'user', content: parsed.messageText, timestamp: new Date() });
       booking.conversationHistory.push({ role: 'assistant', content: groqResponse.message, timestamp: new Date() });

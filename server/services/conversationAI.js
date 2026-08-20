@@ -13,7 +13,7 @@ class ConversationAI {
   constructor() {
     this.groqClient = null;
     this.systemPrompt = null;
-    this.modelName = "llama-3.1-8b-instant";
+    this.modelName = "groq/compound-mini";
   }
 
   init() {
