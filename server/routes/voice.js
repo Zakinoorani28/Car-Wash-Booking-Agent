@@ -1,104 +1,180 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const bookingService = require('../services/bookingService');
-const whapiService = require('../services/whapiService');
+const bookingService = require("../services/bookingService");
+const wapiService = require("../services/wapiService");
 
 /**
  * GET /api/voice/health
- * Health check endpoint for VAPI.ai Voice Agent
+ * Health check for Uplift AI Voice Agent
  */
-router.get('/health', (req, res) => {
-  res.status(200).json({ status: 'online', agent: 'VAPI.ai Voice Booking Service' });
+router.get("/health", (req, res) => {
+  res
+    .status(200)
+    .json({ status: "online", agent: "Uplift AI Voice Booking Service" });
 });
 
 /**
  * POST /api/voice/webhook
- * VAPI.ai Event Webhook Handler
+ * Receive Uplift AI voice events during live phone call:
+ * Event types: call_started, variable_collected, call_ended
  */
-router.post('/webhook', async (req, res) => {
-  // Always return 200 OK immediately to VAPI.ai to prevent retries
-  res.status(200).json({ status: 'received' });
+router.post("/webhook", async (req, res) => {
+  res.status(200).json({ status: "received" });
 
   try {
-    const vapiSecret = process.env.VAPI_WEBHOOK_SECRET;
-    const incomingSecret = req.headers['x-vapi-secret'] || req.headers['x-vapi-signature'];
+    const payload = req.body;
+    console.log("[Uplift AI Event Payload]:", JSON.stringify(payload, null, 2));
 
-    if (vapiSecret && vapiSecret !== 'your_vapi_webhook_secret' && incomingSecret !== vapiSecret) {
-      console.warn('[VAPI Security Warning] x-vapi-secret header mismatch.');
+    const event = payload.event || payload.action || "unknown";
+    const phone =
+      payload.phone ||
+      payload.customer_phone ||
+      payload.caller_id ||
+      "+923000000000";
+
+    let booking = await bookingService.getOrCreateSession(phone, "voice");
+
+    // On variable_collected: update booking in DB
+    if (event === "variable_collected" || payload.variable) {
+      const extractions = {
+        name:
+          payload.variable === "customer_name"
+            ? payload.value
+            : payload.customer_name,
+        vehicleType:
+          payload.variable === "vehicle_type"
+            ? payload.value
+            : payload.vehicle_type,
+        date:
+          payload.variable === "booking_date"
+            ? payload.value
+            : payload.booking_date,
+        time:
+          payload.variable === "booking_time"
+            ? payload.value
+            : payload.booking_time,
+        serviceType:
+          payload.variable === "service_type"
+            ? payload.value
+            : payload.service_type,
+      };
+
+      await bookingService.updateBookingFromExtraction(
+        booking._id || booking.bookingId,
+        extractions,
+      );
+      console.log(
+        `[Uplift AI Variable Collected]: Updated booking ${booking.bookingId}`,
+      );
     }
 
-    const payload = req.body || {};
-    const messageType = payload.message?.type || payload.type || 'unknown';
-
-    // EVENT 1 — "call-started"
-    if (messageType === 'call-started' || payload.event === 'call-started') {
-      const callId = payload.message?.call?.id || payload.call?.id || 'VAPI_CALL';
-      const phone = payload.message?.call?.customer?.number || payload.call?.phoneNumber || '+923000000000';
-      console.log(`VAPI call started: ${callId} from ${phone}`);
-
-      await bookingService.getOrCreateSession(phone, 'voice');
-      return;
-    }
-
-    // EVENT 2 — "transcript"
-    if (messageType === 'transcript' || payload.event === 'transcript') {
-      const transcriptText = payload.message?.transcript || payload.transcript;
-      if (transcriptText) {
-        console.log(`[VAPI Transcript]: "${transcriptText.substring(0, 60)}..."`);
+    // On call_ended with all variables: create confirmed booking
+    if (event === "call_ended" || payload.status === "completed") {
+      if (payload.variables) {
+        const fullExtractions = {
+          name: payload.variables.customer_name,
+          vehicleType: payload.variables.vehicle_type,
+          date: payload.variables.booking_date,
+          time: payload.variables.booking_time,
+          serviceType: payload.variables.service_type,
+        };
+        booking = await bookingService.updateBookingFromExtraction(
+          booking._id || booking.bookingId,
+          fullExtractions,
+        );
       }
-      return;
-    }
 
-    // EVENT 3 — "function-call" or "tool-calls"
-    if (messageType === 'function-call' || messageType === 'tool-calls') {
-      const functionName = payload.message?.functionCall?.name || payload.toolCalls?.[0]?.function?.name;
-      console.log(`[VAPI Function Call]: ${functionName}`);
-      return;
-    }
+      if (booking.isComplete()) {
+        booking.status = "confirmed";
+        booking.completedAt = new Date();
+        if (typeof booking.save === "function") await booking.save();
 
-    // EVENT 4 — "end-of-call-report" (MAIN EVENT)
-    if (messageType === 'end-of-call-report' || payload.event === 'end-of-call-report' || payload.status === 'completed') {
-      const msg = payload.message || payload;
-      const callId = msg.call?.id || 'VAPI_CALL';
-      const phone = msg.call?.customer?.number || msg.call?.phoneNumber || msg.customer_phone || '+923000000000';
-      const structuredData = msg.analysis?.structuredData || msg.structuredData || {};
-
-      console.log(`[VAPI End of Call Report] Call ID: ${callId}, Phone: ${phone}`);
-      console.log('Structured Data extracted by VAPI:', JSON.stringify(structuredData, null, 2));
-
-      // Extract variables from structuredData
-      const customerName = structuredData.customer_name || structuredData.name || 'Voice Customer';
-      const vehicleType = structuredData.vehicle_type || structuredData.carType || 'sedan';
-      const bookingDate = structuredData.booking_date || structuredData.date || new Date().toISOString().split('T')[0];
-      const bookingTime = structuredData.booking_time || structuredData.time || '10:00';
-      const serviceType = structuredData.service_type || structuredData.serviceType || 'basic';
-
-      let booking = await bookingService.getOrCreateSession(phone, 'voice');
-
-      booking = await bookingService.updateBookingFromExtraction(booking._id || booking.bookingId, {
-        name: customerName,
-        phone: phone,
-        vehicleType: vehicleType,
-        date: bookingDate,
-        time: bookingTime,
-        serviceType: serviceType,
-      });
-
-      booking.status = 'confirmed';
-      booking.completedAt = new Date();
-      if (typeof booking.save === 'function') await booking.save();
-
-      console.log(`Voice booking confirmed: ${booking.bookingId}`);
-
-      // Send cross-channel WhatsApp confirmation via Whapi.Cloud if phone number available
-      if (phone && phone !== '+923000000000') {
-        const confirmationText = bookingService.formatConfirmation(booking);
-        console.log(`[Cross-Channel Confirmation] Sending WhatsApp via Whapi.Cloud to ${phone}...`);
-        await whapiService.sendTextMessage(phone, confirmationText);
+        console.log(`Voice booking confirmed: ${booking.bookingId}`);
       }
     }
   } catch (error) {
-    console.error('[VAPI Webhook Error]:', error.message);
+    console.error("[Uplift AI Webhook Error]:", error.message);
+  }
+});
+
+/**
+ * POST /api/voice/booking-complete
+ * Receive final completed booking data from Uplift AI voice agent
+ */
+router.post("/booking-complete", async (req, res) => {
+  res.status(200).json({ status: "processed" });
+
+  try {
+    console.log(
+      "[Uplift AI Booking Complete Webhook Payload]:",
+      JSON.stringify(req.body, null, 2),
+    );
+
+    const body = req.body;
+    const vars = body.variables || body;
+    const phone =
+      body.phone || vars.phone || vars.customer_phone || "+923000000000";
+
+    let booking = await bookingService.getOrCreateSession(phone, "voice");
+
+    const extractions = {
+      name: vars.customer_name || vars.name || "Voice Customer",
+      phone: phone,
+      vehicleType: vars.vehicle_type || vars.carType || "sedan",
+      date:
+        vars.booking_date ||
+        vars.date ||
+        new Date().toISOString().split("T")[0],
+      time: vars.booking_time || vars.time || "10:00",
+      serviceType: vars.service_type || vars.serviceType || "basic",
+    };
+
+    booking = await bookingService.updateBookingFromExtraction(
+      booking._id || booking.bookingId,
+      extractions,
+    );
+    booking.status = "confirmed";
+    booking.completedAt = new Date();
+    if (typeof booking.save === "function") await booking.save();
+
+    console.log(`Voice booking confirmed: ${booking.bookingId}`);
+
+    // Send WhatsApp confirmation summary if customer phone is available
+    if (phone && phone !== "+923000000000") {
+      const confirmationSummary = bookingService.formatConfirmation(booking);
+      console.log(`[WhatsApp Voice Confirmation Sent]: to ${phone}`);
+      await wapiService.sendMessage(phone, confirmationSummary);
+    }
+  } catch (error) {
+    console.error("[Uplift AI Complete Error]:", error.message);
+  }
+});
+
+/**
+ * POST /api/voice/check-slots
+ * Helper tool endpoint for availability check
+ */
+router.post("/check-slots", async (req, res) => {
+  res.status(200).json({
+    availableSlots: ["09:00", "10:00", "14:00", "17:00"],
+    message: "Slots available on requested date.",
+  });
+});
+
+/**
+ * POST /api/voice/create-booking
+ * Direct tool endpoint
+ */
+router.post("/create-booking", async (req, res) => {
+  try {
+    const booking = await bookingService.createBooking(req.body);
+    res.status(200).json({
+      success: true,
+      bookingId: booking.bookingId,
+      message: bookingService.formatConfirmation(booking),
+    });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
   }
 });
 
